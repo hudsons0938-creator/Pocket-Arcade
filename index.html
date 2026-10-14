@@ -1858,6 +1858,238 @@ V.forEach(([eng,name,P,blurb],i)=>{const E=ENG[eng];
 
 </script>
 <script>
+/* TABLETOP PACK — two players, one tablet lying flat between them.
+   Blue sits at the bottom edge, Pink at the top edge. Each player only touches their own half,
+   and everything on Pink's half is drawn facing Pink. Also playable vs CPU, on one keyboard, or online.
+   Controls: drag (slide your piece), tap (kick / chomp / swat), or swipe-to-flick (shots, discs, golf).
+   Keyboard flick: P1 A/D aim, hold W to power up, release to shoot. P2 uses the arrow keys the same way. */
+(()=>{
+const WOOD='#6b4423',WOOD2='#8a5a2e',FELT='#1d6b41';
+const nmT=(i,cpu)=>i?(cpu?'CPU':'PINK'):'BLUE';
+const BT={sticks:false,tab:1,
+  init(){this.st={t:0,sc:[0,0],kp:[{a:0,p:0,h:0},{a:0,p:0,h:0}],msg:''};this.T.init.call(this,this.P,this.st);vsScore(0,0)},
+  update(){const S=this.st;S.t++;if(S.wait>0){S.wait--;return}if(this.T.flick)this.kflick();if(this.cpu&&this.T.ai)this.T.ai.call(this,this.P,S);this.T.update.call(this,this.P,S)},
+  draw(){const S=this.st;this.T.draw.call(this,this.P,S);this.drawAim(S);if(S.msg){T(S.msg,W/2,H*.62,'#ffe9a8',12);TF(S.msg,W/2,H*.38,'#ffe9a8',12)}
+    if(S.wait>0&&!S.msg&&S.wait%20<12){T('READY',W/2,H*.6,'#ffe9a8',12);TF('READY',W/2,H*.4,'#ffe9a8',12)}},
+  netSnap(){return JSON.parse(JSON.stringify(this.st,(k,v)=>typeof v==='number'?Math.round(v*10)/10:v))},netLoad(s){this.st=s},
+  mine(i,y){return i===0?y>=H/2:y<H/2},
+  tgt(i){for(const q of ptrs.values()){if((i===0?q.sy>=.5:q.sy<.5)&&!(i===1&&this.cpu))return{x:q.x,y:q.y}}return null},
+  keyv(i){return kj(...(i?KP2:KP1))||(this.cpu&&i===0?kj(...KP2):null)},
+  kdown(i,c){const K=i?KP2:KP1;return keys[K[c]]||(this.cpu&&i===0&&keys[KP2[c]])},
+  point(w,to,sub){const S=this.st;S.sc[w]++;vsScore(...S.sc);beep(w?200:800,.15,'triangle');if(S.sc[w]>=to){win(nmT(w,this.cpu)+' WINS!',sub||S.sc[0]+' to '+S.sc[1]);return true}return false},
+  up(p){if(!running||!this.T.flick)return;const i=(p.sy>=.5)?0:1;if(i===1&&this.cpu)return;const dx=p.x-p.sxp,dy=p.y-p.syp;if(hyp(dx,dy)<16)return;this.T.flick.call(this,this.P,this.st,i,p.sxp,p.syp,dx,dy)},
+  down(p){if(!running||!this.T.tap)return;const i=p.ny>=.5?0:1;if(i===1&&this.cpu)return;this.T.tap.call(this,this.P,this.st,i,p.x,p.y)},
+  key(k){if(!running||!this.T.tap||this.T.nokey)return;const i=k==='KeyW'?0:k==='ArrowUp'?(this.cpu?0:1):-1;if(i<0)return;const o=this.T.origin?this.T.origin.call(this,this.P,this.st,i):null;this.T.tap.call(this,this.P,this.st,i,o?o.x:W/2,o?o.y:(i?60:H-60),true)},
+  /* keyboard flick: A/D (←/→) aim, hold W (↑) to charge, release to shoot */
+  kflick(){const S=this.st;for(const i of[0,1]){if(i===1&&this.cpu)continue;const kp=S.kp[i];const mir=i?-1:1;
+      if(this.kdown(i,2))kp.a=clamp(kp.a-.035*mir,-1.25,1.25);if(this.kdown(i,3))kp.a=clamp(kp.a+.035*mir,-1.25,1.25);
+      if(this.kdown(i,0)){kp.h=1;kp.p=Math.min(1,kp.p+.018)}else if(kp.h){kp.h=0;const o=this.T.origin.call(this,this.P,S,i);if(o){const L=30+kp.p*170,dir=i?1:-1;
+          this.T.flick.call(this,this.P,S,i,o.x,o.y,Math.sin(kp.a)*L*mir,dir*Math.cos(kp.a)*L)}kp.p=0}}},
+  drawAim(S){if(!this.T.flick||!this.T.origin)return;for(const i of[0,1]){const kp=S.kp[i];if(!kp.h)continue;const o=this.T.origin.call(this,this.P,S,i);if(!o)continue;const mir=i?-1:1,dir=i?1:-1,L=30+kp.p*110;
+      g.strokeStyle=i?P2C:P1C;g.lineWidth=4;g.beginPath();g.moveTo(o.x,o.y);g.lineTo(o.x+Math.sin(kp.a)*L*mir,o.y+dir*Math.cos(kp.a)*L);g.stroke()}}};
+/* helpers */
+const table=(c1,c2)=>{bg(WOOD);R(8,8,W-16,H-16,c1||FELT);g.strokeStyle=c2||'#ffffff22';g.lineWidth=2;g.strokeRect(14,14,W-28,H-28);R(14,H/2-1,W-28,2,'#ffffff33')};
+const ball=(b,r,c,hl)=>{C(b.x+2,b.y+3,r,'#0005');C(b.x,b.y,r,c);C(b.x-r*.3,b.y-r*.3,r*.35,hl||'#ffffff66')};
+const bounceWalls=(b,r,l=14,rr=W-14,t=14,bo=H-14)=>{let hit=false;if(b.x<l+r){b.x=l+r;b.vx=Math.abs(b.vx)*.9;hit=true}if(b.x>rr-r){b.x=rr-r;b.vx=-Math.abs(b.vx)*.9;hit=true}if(t!=null&&b.y<t+r){b.y=t+r;b.vy=Math.abs(b.vy)*.9;hit=true}if(bo!=null&&b.y>bo-r){b.y=bo-r;b.vy=-Math.abs(b.vy)*.9;hit=true}return hit};
+const collide=(a,b,ra,rb,e=1)=>{const dx=b.x-a.x,dy=b.y-a.y,d=hyp(dx,dy),m=ra+rb;if(d<m&&d>0){const nx=dx/d,ny=dy/d,o=(m-d)/2;a.x-=nx*o;a.y-=ny*o;b.x+=nx*o;b.y+=ny*o;const rv=(a.vx-b.vx)*nx+(a.vy-b.vy)*ny;if(rv>0){a.vx-=rv*nx*e;a.vy-=rv*ny*e;b.vx+=rv*nx*e;b.vy+=rv*ny*e;return rv}}return 0};
+const flickV=(dx,dy,max)=>{const L=hyp(dx,dy),k=Math.min(max,L*.09)/(L||1);return{vx:dx*k,vy:dy*k}};
+const ownsDir=(i,dy)=>i===0?dy<-8:dy>8;
+
+/* ===== 1. FOOSBALL ===== */
+const FOOS={how:'Slide your finger left and right in your half to move all your rods. Tap to kick. Keys: A/D move, W kick (P2: ←/→ move, ↑ kick).',
+  rods(i){return i===0?[{y:H-46,n:1,s:0},{y:H*.66,n:3,s:62},{y:H*.30,n:3,s:62}]:[{y:46,n:1,s:0},{y:H*.34,n:3,s:62},{y:H*.70,n:3,s:62}]},
+  init(P,S){S.off=[0,0];S.kick=[0,0];S.ov=[0,0];this.T.serve(S,1)},
+  serve(S,d){S.b={x:W/2+rnd(-30,30),y:H/2,vx:rnd(-1.5,1.5),vy:d*1.2};S.wait=40},
+  men(i,S){const out=[];for(const r of FOOS.rods(i))for(let k=0;k<r.n;k++)out.push({x:clamp(W/2+(k-(r.n-1)/2)*r.s+S.off[i],24,W-24),y:r.y});return out},
+  tap(P,S,i){if(S.kick[i]<=0)S.kick[i]=10},
+  ai(P,S){const b=S.b;S.cpuT=clamp(b.x-W/2+Math.sin(S.t*.05)*10,-110,110);if(b.y<H*.75&&Math.random()<.08&&S.kick[1]<=0)S.kick[1]=10},
+  update(P,S){for(const i of[0,1]){const o=S.off[i];let t;if(this.cpu&&i===1)t=W/2+S.cpuT;else{const q=this.tgt(i);if(q)t=q.x;else{const k=this.keyv(i);if(k)S.off[i]+=k.x*6}}
+      if(t!=null)S.off[i]+=clamp(t-W/2-S.off[i],-12,12)*(this.cpu&&i===1?.35:1);S.off[i]=clamp(S.off[i],-120,120);S.ov[i]=S.off[i]-o;if(S.kick[i]>0)S.kick[i]--}
+    const b=S.b;b.x+=b.vx;b.y+=b.vy;b.vx*=.996;b.vy*=.996;const gw=P.gw||110;
+    if(b.x<22||b.x>W-22){b.vx*=-.9;b.x=clamp(b.x,22,W-22);beep(300,.02)}
+    if(b.y<22){if(Math.abs(b.x-W/2)<gw/2){if(this.point(0,P.to||5))return;return this.T.serve(S,-1)}b.vy=Math.abs(b.vy);b.y=22}
+    if(b.y>H-22){if(Math.abs(b.x-W/2)<gw/2){if(this.point(1,P.to||5))return;return this.T.serve(S,1)}b.vy=-Math.abs(b.vy);b.y=H-22}
+    for(const i of[0,1])for(const m of this.T.men(i,S)){const dx=b.x-m.x,dy=b.y-m.y;if(Math.abs(dx)<17&&Math.abs(dy)<17){const dir=i?1:-1;
+        if(S.kick[i]>4){b.vy=dir*(P.kp||9)+rnd(-.5,.5);b.vx=dx*.25+S.ov[i]*.6;beep(700,.04)}else{const n=Math.abs(dx)>Math.abs(dy);if(n){b.vx=Math.sign(dx)*Math.max(2,Math.abs(b.vx))+S.ov[i]*.5}else{b.vy=Math.sign(dy)*Math.max(1.6,Math.abs(b.vy)*.8)}b.x=m.x+(n?Math.sign(dx)*17:dx);b.y=m.y+(n?dy:Math.sign(dy)*17);beep(400,.02)}}}
+    const sp=hyp(b.vx,b.vy);if(sp>12){b.vx*=12/sp;b.vy*=12/sp}if(sp<.4&&S.t%60===0){b.vx+=rnd(-1,1);b.vy+=rnd(-1,1)}},
+  draw(P,S){table('#2a7a3a');const gw=P.gw||110;R(W/2-gw/2,4,gw,8,'#111');R(W/2-gw/2,H-12,gw,8,'#111');g.strokeStyle='#ffffff55';g.lineWidth=2;g.beginPath();g.arc(W/2,H/2,40,0,7);g.stroke();bigScores(...S.sc);
+    for(const i of[0,1]){for(const r of this.T.rods(i))R(8,r.y-2,W-16,4,'#c8c8d0');for(const m of this.T.men(i,S)){const k=S.kick[i]>4?(i?8:-8):0;R(m.x-11,m.y-14+k,22,28,i?P2C:P1C);C(m.x,m.y+k,7,'#ffffff55')}}
+    ball(S.b,9,'#f4f1e8')},
+  art(c){c.fillStyle='#2a7a3a';c.fillRect(0,0,128,96);c.fillStyle='#ccc';[20,46,70].forEach(y=>c.fillRect(0,y,128,2));c.fillStyle='#5ab0ff';[30,64,98].forEach(x=>c.fillRect(x-4,40,8,12));c.fillStyle='#ff5d8f';[30,64,98].forEach(x=>c.fillRect(x-4,64,8,12));c.fillStyle='#fff';c.beginPath();c.arc(50,58,4,0,7);c.fill()}};
+/* ===== 2. PINBALL DUEL ===== */
+const PIN={nokey:1,how:'Tap the left or right side of your half to flip that flipper. Keep the ball from getting past your flippers. Keys: A/D flippers (P2: ←/→).',
+  fl(i){const y=i?56:H-56;return[{px:80,py:y,dir:1,v:i?-1:1},{px:W-80,py:y,dir:-1,v:i?-1:1}]},
+  tip(f,up){const a=up?-.45:.42;return{x:f.px+f.dir*Math.cos(a)*76,y:f.py+f.v*Math.sin(a)*76}},
+  init(P,S){S.up=[[0,0],[0,0]];S.bm=(P.bumps||[[W/2,H/2,22],[W*.25,H*.4,16],[W*.75,H*.6,16],[W*.75,H*.4,16],[W*.25,H*.6,16]]).map(b=>({x:b[0],y:b[1],r:b[2],hit:0}));this.T.serve(S,Math.random()<.5?1:-1)},
+  serve(S,d){S.b={x:W/2,y:H/2+d*60,vx:rnd(-2.5,2.5),vy:d*3};S.wait=45},
+  tap(P,S,i,x){const left=i===0?x<W/2:x>=W/2;S.up[i][i===0?(left?0:1):(left?1:0)]=12},
+  ai(P,S){const b=S.b;if(b.vy<0&&b.y<130)S.up[1][b.x<W/2?0:1]=12},
+  update(P,S){for(const i of[0,1]){if(this.cpu&&i===1)continue;if(this.kdown(i,2))S.up[i][0]=Math.max(S.up[i][0],8);if(this.kdown(i,3))S.up[i][1]=Math.max(S.up[i][1],8)}
+    const b=S.b;const steps=3;for(let st=0;st<steps;st++){b.x+=b.vx/steps;b.y+=b.vy/steps;bounceWalls(b,9,14,W-14,null,null);
+      for(const m of S.bm){const dx=b.x-m.x,dy=b.y-m.y,d=hyp(dx,dy);if(d<m.r+9){const nx=dx/d,ny=dy/d;b.x=m.x+nx*(m.r+9);b.y=m.y+ny*(m.r+9);const vn=b.vx*nx+b.vy*ny;b.vx-=2*vn*nx;b.vy-=2*vn*ny;b.vx+=nx*1.5;b.vy+=ny*1.5;m.hit=8;beep(880,.03,'triangle')}}
+      for(const i of[0,1])this.T.fl(i).forEach((f,k)=>{const e=this.T.tip(f,S.up[i][k]>0);const vx=e.x-f.px,vy=e.y-f.py,l2=vx*vx+vy*vy;let t=((b.x-f.px)*vx+(b.y-f.py)*vy)/l2;t=clamp(t,0,1);
+        const cx=f.px+vx*t,cy=f.py+vy*t,dx=b.x-cx,dy=b.y-cy,d=hyp(dx,dy);
+        if(d<14&&d>0){const nx=dx/d,ny=dy/d;b.x=cx+nx*14;b.y=cy+ny*14;const vn=b.vx*nx+b.vy*ny;if(vn<0){b.vx-=1.8*vn*nx;b.vy-=1.8*vn*ny}if(S.up[i][k]>8){b.vy+=(i?1:-1)*(5+t*6);b.vx+=nx*2;beep(520,.04)}}});
+      if((b.y>H-62||b.y<62)&&(b.x<84||b.x>W-84)){const side=b.x<84?1:-1;b.vx=side*Math.max(1.5,Math.abs(b.vx));b.x=clamp(b.x,84,W-84)}}
+    for(const i of[0,1])for(let k=0;k<2;k++)if(S.up[i][k]>0)S.up[i][k]--;for(const m of S.bm)if(m.hit>0)m.hit--;
+    const sp=hyp(b.vx,b.vy),mx=P.max||11,mn=3;if(sp>mx){b.vx*=mx/sp;b.vy*=mx/sp}if(sp<mn&&sp>0){b.vx*=mn/sp;b.vy*=mn/sp}
+    if(b.y>H+12){if(this.point(1,P.to||5))return;this.T.serve(S,-1)}else if(b.y<-12){if(this.point(0,P.to||5))return;this.T.serve(S,1)}},
+  draw(P,S){table('#1a1033','#c58bff55');bigScores(...S.sc);for(const m of S.bm){C(m.x,m.y,m.r+(m.hit?3:0),m.hit?'#fff6c8':'#ffc53d');C(m.x,m.y,m.r*.55,'#7a4dd6')}
+    for(const i of[0,1])this.T.fl(i).forEach((f,k)=>{const e=this.T.tip(f,S.up[i][k]>0),ex=e.x,ey=e.y;g.strokeStyle=i?P2C:P1C;g.lineWidth=14;g.lineCap='round';g.beginPath();g.moveTo(f.px,f.py);g.lineTo(ex,ey);g.stroke();C(f.px,f.py,9,'#fff')});
+    R(14,0,70,62,'#3a2a20');R(W-84,0,70,62,'#3a2a20');R(14,H-62,70,62,'#3a2a20');R(W-84,H-62,70,62,'#3a2a20');ball(S.b,9,'#e8e8f0')},
+  art(c){c.fillStyle='#1a1033';c.fillRect(0,0,128,96);c.fillStyle='#ffc53d';[[64,48],[34,36],[94,60]].forEach(([x,y])=>{c.beginPath();c.arc(x,y,7,0,7);c.fill()});c.strokeStyle='#5ab0ff';c.lineWidth=5;c.beginPath();c.moveTo(24,86);c.lineTo(52,80);c.moveTo(104,86);c.lineTo(76,80);c.stroke();c.strokeStyle='#ff5d8f';c.beginPath();c.moveTo(24,10);c.lineTo(52,16);c.moveTo(104,10);c.lineTo(76,16);c.stroke()}};
+/* ===== 3. FLICK TARGET (curling-style) ===== */
+const TARGET={how:'Swipe from your end toward the target to slide a disc. You each get 4 discs per round. Closer rings score more: 3, 2, 1. Knock your rival out! Keys: A/D aim, hold W to power, release (P2: arrows).',
+  init(P,S){S.d=[];S.left=[4,4];S.rd=1;S.cd=[0,0]},
+  origin(P,S,i){return S.left[i]>0&&S.cd[i]<=0?{x:W/2,y:i?60:H-60}:null},
+  flick(P,S,i,sx,sy,dx,dy){if(S.left[i]<=0||S.cd[i]>0||!ownsDir(i,dy))return;const x=clamp(sx,40,W-40),y=i?60:H-60;const v=flickV(dx,dy,12);S.d.push({x,y,vx:v.vx,vy:v.vy,o:i});S.left[i]--;S.cd[i]=30;beep(i?440:520,.05)},
+  ai(P,S){if(S.left[1]>0&&S.cd[1]<=0&&S.t%50===0){const tg=Math.random()<.4&&S.d.some(d=>d.o===0)?S.d.find(d=>d.o===0):{x:W/2,y:H/2};this.T.flick.call(this,P,S,1,W/2+rnd(-30,30),60,(tg.x-W/2)*.6+rnd(-10,10),(tg.y-60)*.62*rnd(.9,1.1)+20)}},
+  update(P,S){for(const i of[0,1])if(S.cd[i]>0)S.cd[i]--;
+    for(const d of S.d){d.x+=d.vx;d.y+=d.vy;d.vx*=.982;d.vy*=.982;if(bounceWalls(d,13,14,W-14,14,H-14))beep(260,.02)}
+    for(let a=0;a<S.d.length;a++)for(let b=a+1;b<S.d.length;b++){const rv=collide(S.d[a],S.d[b],13,13,1);if(rv>.5)beep(600,.03)}
+    const moving=S.d.some(d=>hyp(d.vx,d.vy)>.08);
+    if(!moving&&S.left[0]===0&&S.left[1]===0){if(!S.done){S.done=60}else if(--S.done===0){const pts=[0,0];for(const d of S.d){const r=hyp(d.x-W/2,d.y-H/2);pts[d.o]+=r<28?3:r<60?2:r<95?1:0}
+        S.sc[0]+=pts[0];S.sc[1]+=pts[1];vsScore(...S.sc);beep(880,.2,'triangle');const to=P.to||12;if(S.sc[0]>=to||S.sc[1]>=to){const w=S.sc[0]>=S.sc[1]?0:1;if(S.sc[0]===S.sc[1]){S.msg='';}else return win(nmT(w,this.cpu)+' WINS!',S.sc[0]+' to '+S.sc[1])}
+        S.msg='+'+pts[0]+'  ·  +'+pts[1];S.d=[];S.left=[4,4];S.rd++;S.wait=70;setTimeout(()=>{if(cur===this)this.st.msg=''},1200)}}},
+  draw(P,S){table('#cfe6f2','#9ec2d8');for(const[r,c]of[[95,'#3a7bd5'],[60,'#f4f8fb'],[28,'#e8455a']]){C(W/2,H/2,r,c)}C(W/2,H/2,6,'#f4f8fb');bigScores(...S.sc);
+    R(14,H-90,W-28,2,'#3a7bd555');R(14,88,W-28,2,'#e8455a55');
+    for(const d of S.d){ball(d,13,d.o?P2C:P1C);C(d.x,d.y,5,'#ffffffaa')}
+    for(const i of[0,1])for(let k=0;k<S.left[i];k++){const x=W-30-k*20,y=i?28:H-28;C(x,y,7,i?P2C:P1C)}},
+  art(c){c.fillStyle='#cfe6f2';c.fillRect(0,0,128,96);[[30,'#3a7bd5'],[20,'#fff'],[10,'#e8455a']].forEach(([r,col])=>{c.fillStyle=col;c.beginPath();c.arc(64,48,r,0,7);c.fill()});c.fillStyle='#5ab0ff';c.beginPath();c.arc(54,44,6,0,7);c.fill();c.fillStyle='#ff5d8f';c.beginPath();c.arc(76,56,6,0,7);c.fill()}};
+/* ===== 4. MARBLE KNOCKOUT ===== */
+const MARBLE={how:'Swipe toward the ring to shoot your big shooter marble from your edge. Knock all of your rival\'s small marbles out of the ring. Keys: A/D aim, hold W to power, release (P2: arrows).',
+  init(P,S){S.R=P.R||130;S.m=[];for(const i of[0,1])for(let k=0;k<(P.n||5);k++){const a=(i?-1:1)*(.3+k*.6)+(i?Math.PI:0),r=rnd(30,S.R*.7);S.m.push({x:W/2+Math.cos(a)*r*.9,y:H/2+(i?-1:1)*Math.abs(Math.sin(a))*r*.8+rnd(-8,8),vx:0,vy:0,o:i})}S.sh=[null,null];S.cd=[0,0]},
+  origin(P,S,i){return!S.sh[i]&&S.cd[i]<=0?{x:W/2,y:i?40:H-40}:null},
+  flick(P,S,i,sx,sy,dx,dy){if(S.sh[i]||S.cd[i]>0||!ownsDir(i,dy))return;const v=flickV(dx,dy,13);S.sh[i]={x:clamp(sx,40,W-40),y:i?40:H-40,vx:v.vx,vy:v.vy,o:i,t:0};beep(500,.04)},
+  ai(P,S){if(!S.sh[1]&&S.cd[1]<=0&&S.t%40===0){const tg=S.m.filter(m=>m.o===0).sort((a,b)=>hyp(a.x-W/2,a.y-H/2)-hyp(b.x-W/2,b.y-H/2)).pop();if(!tg)return;const sx=W/2+rnd(-60,60);this.T.flick.call(this,P,S,1,sx,40,(tg.x-sx)*.9+rnd(-14,14),(tg.y-40)*.9)}},
+  update(P,S){for(const i of[0,1])if(S.cd[i]>0)S.cd[i]--;const all=S.m.concat(S.sh.filter(Boolean));
+    for(const m of all){m.x+=m.vx;m.y+=m.vy;m.vx*=.982;m.vy*=.982;bounceWalls(m,m.t!=null?14:9)}
+    for(let a=0;a<all.length;a++)for(let b=a+1;b<all.length;b++){const rv=collide(all[a],all[b],all[a].t!=null?14:9,all[b].t!=null?14:9,1);if(rv>.5)beep(700,.02)}
+    for(const i of[0,1]){const s=S.sh[i];if(s&&++s.t>40&&hyp(s.vx,s.vy)<.15){S.sh[i]=null;S.cd[i]=20}}
+    for(const m of S.m)if(!m.out&&hyp(m.x-W/2,m.y-H/2)>S.R+9&&hyp(m.vx,m.vy)<.5){m.out=1;beep(m.o?800:300,.1,'triangle')}
+    S.m=S.m.filter(m=>!m.out||hyp(m.vx,m.vy)>.05);const cnt=[0,1].map(i=>S.m.filter(m=>m.o===i&&!m.out&&hyp(m.x-W/2,m.y-H/2)<=S.R+9).length);
+    S.sc=[(P.n||5)-cnt[1],(P.n||5)-cnt[0]];vsScore(...S.sc);if(cnt[0]===0||cnt[1]===0){const w=cnt[1]===0?0:1;return win(nmT(w,this.cpu)+' WINS!','All marbles knocked out')}},
+  draw(P,S){table('#c9a46a','#8a6a3a');g.strokeStyle='#5a3a1a';g.lineWidth=4;g.beginPath();g.arc(W/2,H/2,S.R,0,7);g.stroke();bigScores(...S.sc);
+    for(const m of S.m)ball(m,9,m.o?'#ff8fb1':'#8fc8ff','#ffffffaa');for(const s of S.sh)if(s)ball(s,14,s.o?P2C:P1C,'#ffffffaa');
+    for(const i of[0,1])if(!S.sh[i]&&S.cd[i]<=0)C(W/2,i?40:H-40,14,(i?P2C:P1C)+'88')},
+  art(c){c.fillStyle='#c9a46a';c.fillRect(0,0,128,96);c.strokeStyle='#5a3a1a';c.lineWidth=3;c.beginPath();c.arc(64,48,34,0,7);c.stroke();[[50,40,'#8fc8ff'],[70,54,'#ff8fb1'],[60,60,'#8fc8ff'],[78,38,'#ff8fb1']].forEach(([x,y,col])=>{c.fillStyle=col;c.beginPath();c.arc(x,y,5,0,7);c.fill()});c.fillStyle='#5ab0ff';c.beginPath();c.arc(64,88,7,0,7);c.fill()}};
+/* ===== 5. CASTLE SIEGE ===== */
+const SIEGE={how:'Swipe from your catapult to lob a boulder. Longer swipes fly farther. Smash through your rival\'s walls and hit their crown 3 times. Keys: A/D aim, hold W to power, release (P2: arrows).',
+  init(P,S){S.bl=[];for(const i of[0,1]){const y0=i?18:H-18-24*3;for(let r=0;r<3;r++)for(let c=0;c<9;c++){if(r===(i?0:2)&&c===4)continue;S.bl.push({x:20+c*36,y:y0+r*24,o:i,hp:P.hp||2})}}
+    S.k=[{x:W/2,y:H-30,hp:3},{x:W/2,y:30,hp:3}];S.rk=[];S.cd=[0,0];S.wait=30},
+  origin(P,S,i){return S.cd[i]<=0?{x:W/2,y:i?110:H-110}:null},
+  flick(P,S,i,sx,sy,dx,dy){if(S.cd[i]>0||!ownsDir(i,dy))return;const o={x:W/2,y:i?110:H-110};const L=hyp(dx,dy),k=Math.min(4.2,Math.max(1.2,L/40));
+    const tx=clamp(o.x+dx*k,20,W-20),ty=clamp(o.y+dy*k,10,H-10);S.rk.push({sx:o.x,sy:o.y,tx,ty,t:0,d:Math.max(40,hyp(tx-o.x,ty-o.y)/6),o:i,x:o.x,y:o.y,h:0});S.cd[i]=P.cd||70;beep(i?300:360,.08,'triangle')},
+  ai(P,S){if(S.cd[1]<=0&&S.t%30===0){const tg=Math.random()<.5?S.k[0]:(S.bl.filter(b=>b.o===0)[ri(0,20)]||S.k[0]);const o={x:W/2,y:110};const dx=tg.x-o.x+rnd(-26,26),dy=tg.y-o.y+rnd(-18,18),L=hyp(dx,dy)||1,sl=Math.sqrt(40*L);this.T.flick.call(this,P,S,1,o.x,o.y,dx/L*sl,dy/L*sl)}},
+  update(P,S){for(const i of[0,1])if(S.cd[i]>0)S.cd[i]--;
+    for(const r of S.rk){r.t++;const p=r.t/r.d;r.x=r.sx+(r.tx-r.sx)*p;r.y=r.sy+(r.ty-r.sy)*p;r.h=Math.sin(p*Math.PI)*60;if(p>=1){r.done=1;beep(120,.15,'sawtooth');
+        for(const b of S.bl)if(b.hp>0&&hyp(b.x+16-r.tx,b.y+11-r.ty)<(P.blast||36))b.hp--;
+        for(const[i,k]of S.k.entries())if(hyp(k.x-r.tx,k.y-r.ty)<26){const shield=S.bl.some(b=>b.o===i&&b.hp>0&&hyp(b.x+16-r.tx,b.y+11-r.ty)<20);if(!shield){k.hp--;beep(900,.25,'square');S.sc[1-i]=3-k.hp;vsScore(3-S.k[0].hp,3-S.k[1].hp);if(k.hp<=0)return win(nmT(1-i,this.cpu)+' WINS!','The crown has fallen')}}}}
+    S.rk=S.rk.filter(r=>!r.done);S.bl=S.bl.filter(b=>b.hp>0)},
+  draw(P,S){table('#5a7a3a','#3a5a2a');bigScores(...S.sc);for(const b of S.bl){R(b.x,b.y,32,20,b.hp>1?'#9a9aa4':'#6a6a74');R(b.x,b.y,32,3,'#ffffff33')}
+    S.k.forEach((k,i)=>{C(k.x,k.y,15,i?P2C:P1C);g.fillStyle='#ffd23f';g.beginPath();const s=i?-1:1;g.moveTo(k.x-9,k.y+5*s);g.lineTo(k.x-9,k.y-6*s);g.lineTo(k.x-4,k.y);g.lineTo(k.x,k.y-8*s);g.lineTo(k.x+4,k.y);g.lineTo(k.x+9,k.y-6*s);g.lineTo(k.x+9,k.y+5*s);g.fill();
+      for(let h=0;h<3;h++)C(k.x-14+h*14,k.y+(i?-24:24),4,h<k.hp?'#ff4d6d':'#00000055')});
+    for(const i of[0,1]){const y=i?110:H-110;C(W/2,y,12,'#6b4423');if(S.cd[i]<=0)C(W/2,y,6,'#c8c8d0')}
+    for(const r of S.rk){C(r.x,r.y,9,'#0004');C(r.x,r.y-r.h,8+r.h*.05,'#7a7a84');g.strokeStyle='#ffffff22';g.setLineDash([4,6]);g.beginPath();g.moveTo(r.x,r.y);g.lineTo(r.tx,r.ty);g.stroke();g.setLineDash([])}},
+  art(c){c.fillStyle='#5a7a3a';c.fillRect(0,0,128,96);c.fillStyle='#9a9aa4';for(let i=0;i<8;i++){c.fillRect(4+i*16,76,13,8);c.fillRect(4+i*16,10,13,8)}c.fillStyle='#ffd23f';c.fillRect(58,86,12,6);c.fillStyle='#7a7a84';c.beginPath();c.arc(70,40,7,0,7);c.fill()}};
+/* ===== 6. CHOMP CHOMP ===== */
+const CHOMP={how:'Slide your finger left and right in your half to move your chomper. Tap to chomp. Eat the most marbles! Keys: A/D move, W chomp (P2: ←/→, ↑).',
+  init(P,S){S.h=[{x:W/2,c:0,cd:0},{x:W/2,c:0,cd:0}];S.m=[];S.n=P.n||28;S.drop=0;S.eat=[0,0]},
+  tap(P,S,i){const h=S.h[i];if(h.cd<=0){h.c=16;h.cd=P.cd||26;beep(180,.05,'square')}},
+  ai(P,S){const h=S.h[1];const near=S.m.filter(m=>m.y<H/2).sort((a,b)=>a.y-b.y)[0];if(near){h.tx=near.x;if(near.y<120&&Math.abs(near.x-h.x)<40&&h.cd<=0&&Math.random()<.3){h.c=16;h.cd=P.cd||26}}},
+  update(P,S){if(S.drop<S.n&&S.t%12===0){S.drop++;const a=rnd(0,6.28);S.m.push({x:W/2,y:H/2,vx:Math.cos(a)*rnd(2,4),vy:Math.sin(a)*rnd(2,4),c:ri(0,4)})}
+    S.h.forEach((h,i)=>{let t;if(this.cpu&&i===1)t=h.tx;else{const q=this.tgt(i);if(q)t=q.x;else{const k=this.keyv(i);if(k)h.x+=k.x*6}}if(t!=null)h.x+=clamp(t-h.x,-9,9)*(this.cpu&&i===1?.55:1);h.x=clamp(h.x,50,W-50);if(h.c>0)h.c--;if(h.cd>0)h.cd--});
+    for(const m of S.m){m.x+=m.vx;m.y+=m.vy;m.vx*=.997;m.vy*=.997;if(hyp(m.vx,m.vy)<1.2){m.vx*=1.05;m.vy*=1.05}bounceWalls(m,8,14,W-14,40,H-40)}
+    for(let a=0;a<S.m.length;a++)for(let b=a+1;b<S.m.length;b++)collide(S.m[a],S.m[b],8,8,1);
+    S.h.forEach((h,i)=>{if(h.c<=0)return;const ext=Math.sin((16-h.c)/16*Math.PI)*90,my=i?40+ext:H-40-ext;for(const m of S.m)if(!m.e&&Math.abs(m.x-h.x)<40&&Math.abs(m.y-my)<26){m.e=1;S.eat[i]++;S.sc=S.eat.slice();vsScore(...S.sc);SND.J.coin()}});
+    S.m=S.m.filter(m=>!m.e);if(S.drop>=S.n&&!S.m.length){const[a,b]=S.eat;return win(a===b?'TIE!':nmT(a>b?0:1,this.cpu)+' WINS!',a+' marbles to '+b)}},
+  draw(P,S){table('#f2d36b','#c99a2e');C(W/2,H/2,26,'#c99a2e');bigScores(...S.sc);const cols=['#ff4d6d','#3ddc97','#5ab0ff','#c58bff','#ffffff'];for(const m of S.m)ball(m,8,cols[m.c]);
+    S.h.forEach((h,i)=>{const ext=h.c>0?Math.sin((16-h.c)/16*Math.PI)*90:0,y=i?40+ext:H-40-ext,c=i?P2C:P1C,base=i?14:H-14;R(h.x-18,Math.min(base,y),36,Math.abs(y-base),c);C(h.x,y,30,c);
+      g.fillStyle='#fff';const s=i?1:-1;C(h.x-14,y+s*-6,6,'#fff');C(h.x+14,y+s*-6,6,'#fff');C(h.x-14,y+s*-6,3,'#111');C(h.x+14,y+s*-6,3,'#111');R(h.x-20,y+s*12-(i?0:6),40,6,h.c>0?'#111':'#00000055')});
+    T('LEFT '+(S.n-S.drop+S.m.length),W/2,H/2+44,'#6b4423',8);TF('LEFT '+(S.n-S.drop+S.m.length),W/2,H/2-44,'#6b4423',8)},
+  art(c){c.fillStyle='#f2d36b';c.fillRect(0,0,128,96);[[40,40,'#ff4d6d'],[70,50,'#3ddc97'],[90,36,'#5ab0ff'],[60,30,'#c58bff']].forEach(([x,y,col])=>{c.fillStyle=col;c.beginPath();c.arc(x,y,5,0,7);c.fill()});c.fillStyle='#5ab0ff';c.beginPath();c.arc(64,88,16,Math.PI,0);c.fill();c.fillStyle='#ff5d8f';c.beginPath();c.arc(64,8,16,0,Math.PI);c.fill()}};
+/* ===== 7. BOMB PASS ===== */
+const BOMB={how:'A bomb bounces around the table. When it is in your half, tap it to swat it to the other side. If it explodes in your half, you lose the round. Keys: W swats (P2: ↑).',
+  init(P,S){this.T.round(P,S)},
+  round(P,S){S.b={x:W/2,y:H/2,vx:rnd(-2,2),vy:Math.random()<.5?3:-3,f:rnd(P.fmin||480,P.fmax||820),sp:3};S.wait=50;S.boom=0},
+  tap(P,S,i,x,y,key){const b=S.b;if(S.boom||!this.mine(i,b.y))return;if(!key&&hyp(x-b.x,y-b.y)>(P.reach||60))return;b.sp=Math.min(P.max||11,b.sp+.45);const a=rnd(-.6,.6);b.vx=Math.sin(a)*b.sp;b.vy=(i?1:-1)*Math.cos(a)*b.sp;beep(600+b.sp*30,.05,'square')},
+  ai(P,S){const b=S.b;if(this.mine(1,b.y)&&b.y<H/2-30&&(S.ai=(S.ai||0)+1)>(P.cpuR||14)){S.ai=0;this.T.tap.call(this,P,S,1,b.x,b.y,true)}},
+  update(P,S){const b=S.b;if(S.boom){if(--S.boom===0){const w=b.y<H/2?0:1;if(this.point(w,P.to||3))return;this.T.round(P,S)}return}
+    b.x+=b.vx;b.y+=b.vy;if(bounceWalls(b,14))beep(250,.02);b.f--;if(b.f<120&&b.f%(b.f<60?8:16)===0)beep(1200,.03,'square',.03);if(b.f<=0){S.boom=60;SND.J.hurt();beep(80,.5,'sawtooth',.1)}},
+  draw(P,S){table('#2a2420','#4a3a2a');R(14,H/2-2,W-28,4,'#ff4d6d88');bigScores(...S.sc);const b=S.b;
+    if(S.boom){g.globalAlpha=S.boom/60;C(b.x,b.y,(60-S.boom)*4+20,'#ffb627');C(b.x,b.y,(60-S.boom)*2.5+10,'#ff6a1f');g.globalAlpha=1;return}
+    const pulse=b.f<120&&b.f%16<8;ball(b,14,pulse?'#ff4d6d':'#222','#ffffff44');R(b.x-2,b.y-22,4,9,'#8a6a3a');C(b.x,b.y-24,3+Math.random()*2,'#ffb627');
+    const s=Math.ceil(b.f/60);T(String(s),b.x,b.y+34,'#fff',9);TF(String(s),b.x,b.y-34,'#fff',9)},
+  art(c){c.fillStyle='#2a2420';c.fillRect(0,0,128,96);c.fillStyle='#ff4d6d';c.fillRect(0,47,128,2);c.fillStyle='#222';c.beginPath();c.arc(64,60,13,0,7);c.fill();c.fillStyle='#ffb627';c.beginPath();c.arc(70,44,4,0,7);c.fill()}};
+/* ===== 8. MINI GOLF DUEL ===== */
+const HOLES=[
+ {cup:[180,270],w:[]},
+ {cup:[180,270],w:[[60,200,90,14],[210,200,90,14],[60,326,90,14],[210,326,90,14]]},
+ {cup:[90,270],w:[[150,150,14,240]],mv:1},
+ {cup:[180,270],w:[[40,230,120,14],[200,296,120,14]],ring:1},
+ {cup:[270,270],w:[[100,180,160,14],[100,346,160,14],[100,180,14,80],[246,280,14,80]]}];
+const GOLF={how:'Swipe in the direction you want your ball to go. Longer swipes putt harder. Both of you play at once. First ball in the cup wins the hole. Win 3 of 5 holes. Keys: A/D aim, hold W to power, release (P2: arrows).',
+  init(P,S){S.h=0;this.T.hole(P,S)},
+  hole(P,S){S.b=[{x:W/2,y:H-60,vx:0,vy:0,in:0},{x:W/2,y:60,vx:0,vy:0,in:0}];S.wait=50;S.bar=W/2},
+  origin(P,S,i){const b=S.b[i];return hyp(b.vx,b.vy)<.1&&!b.in?{x:b.x,y:b.y}:null},
+  flick(P,S,i,sx,sy,dx,dy){const b=S.b[i];if(hyp(b.vx,b.vy)>.1||b.in)return;const v=flickV(dx,dy,11);b.vx=v.vx;b.vy=v.vy;beep(500,.04)},
+  ai(P,S){const b=S.b[1],H0=HOLES[S.h%HOLES.length];if(hyp(b.vx,b.vy)<.1&&!b.in&&S.t%45===0){const dx=H0.cup[0]-b.x,dy=H0.cup[1]-b.y;let ax=dx,ay=dy;for(const w of H0.w){if(Math.abs(b.x-(w[0]+w[2]/2))<w[2]/2+10&&((w[1]>b.y&&w[1]<H0.cup[1])||(w[1]<b.y&&w[1]>H0.cup[1])))ax+=(b.x<W/2?1:-1)*120}
+      this.T.flick.call(this,P,S,1,b.x,b.y,ax*rnd(.8,1.05)/1.4,ay*rnd(.8,1.05)/1.4)}},
+  walls(S){const H0=HOLES[S.h%HOLES.length];const w=H0.w.slice();if(H0.mv){const y=150+((Math.sin(S.t*.02)+1)/2)*200;w.push([150,y,14,40])}return w},
+  update(P,S){const H0=HOLES[S.h%HOLES.length],cup=H0.cup;
+    for(const[i,b]of S.b.entries()){if(b.in)continue;b.x+=b.vx;b.y+=b.vy;b.vx*=.975;b.vy*=.975;if(hyp(b.vx,b.vy)<.06){b.vx=b.vy=0}bounceWalls(b,8);
+      for(const w of this.T.walls(S)){if(b.x>w[0]-8&&b.x<w[0]+w[2]+8&&b.y>w[1]-8&&b.y<w[1]+w[3]+8){const l=b.x-(w[0]-8),r=w[0]+w[2]+8-b.x,t=b.y-(w[1]-8),bo=w[1]+w[3]+8-b.y,m=Math.min(l,r,t,bo);if(m===l){b.x=w[0]-8;b.vx=-Math.abs(b.vx)}else if(m===r){b.x=w[0]+w[2]+8;b.vx=Math.abs(b.vx)}else if(m===t){b.y=w[1]-8;b.vy=-Math.abs(b.vy)}else{b.y=w[1]+w[3]+8;b.vy=Math.abs(b.vy)}beep(300,.02)}}
+      if(H0.ring){const d=hyp(b.x-cup[0],b.y-cup[1]);if(d<60&&d>40){b.vx+=(b.x-cup[0])/d*.12;b.vy+=(b.y-cup[1])/d*.12}}
+      const d=hyp(b.x-cup[0],b.y-cup[1]);if(d<11&&hyp(b.vx,b.vy)<7){b.in=1;SND.J.win();S.h++;if(this.point(i,P.to||3))return;S.msg=nmT(i,this.cpu)+' SINKS IT!';setTimeout(()=>{if(cur===this)this.st.msg=''},1100);return this.T.hole(P,S)}}
+    collide(S.b[0],S.b[1],8,8,1)},
+  draw(P,S){table('#3a9a4a','#2a7a3a');const H0=HOLES[S.h%HOLES.length];bigScores(...S.sc);if(H0.ring){g.strokeStyle='#ffffff33';g.lineWidth=20;g.beginPath();g.arc(H0.cup[0],H0.cup[1],50,0,7);g.stroke()}
+    C(H0.cup[0],H0.cup[1],12,'#111');R(H0.cup[0]-1,H0.cup[1]-34,2,34,'#eee');g.fillStyle='#ff4d4d';g.beginPath();g.moveTo(H0.cup[0]+1,H0.cup[1]-34);g.lineTo(H0.cup[0]+16,H0.cup[1]-28);g.lineTo(H0.cup[0]+1,H0.cup[1]-22);g.fill();
+    for(const w of this.T.walls(S)){R(w[0],w[1],w[2],w[3],WOOD2);R(w[0],w[1],w[2],3,'#ffffff33')}
+    S.b.forEach((b,i)=>{if(!b.in){ball(b,8,'#fff');C(b.x,b.y,3,i?P2C:P1C)}});T('HOLE '+(S.h%HOLES.length+1),W/2,H-24,'#ffffffaa',8);TF('HOLE '+(S.h%HOLES.length+1),W/2,24,'#ffffffaa',8)},
+  art(c){c.fillStyle='#3a9a4a';c.fillRect(0,0,128,96);c.fillStyle='#8a5a2e';c.fillRect(20,30,40,6);c.fillRect(70,60,40,6);c.fillStyle='#111';c.beginPath();c.arc(64,48,6,0,7);c.fill();c.fillStyle='#ff4d4d';c.fillRect(64,32,10,6);c.fillStyle='#fff';c.beginPath();c.arc(64,86,4,0,7);c.arc(64,10,4,0,7);c.fill()}};
+/* ===== 9. SHOOTOUT ===== */
+const SHOOT={how:'Your finger moves your goalie along your goal. Swipe toward your rival\'s goal to shoot. Block their shots and score yours! Keys: A/D goalie, hold W to power a shot, release (P2: arrows).',
+  init(P,S){S.k=[{x:W/2},{x:W/2}];S.b=[];S.cd=[0,0]},
+  origin(P,S,i){return S.cd[i]<=0?{x:W/2,y:i?150:H-150}:null},
+  flick(P,S,i,sx,sy,dx,dy){if(S.cd[i]>0||!ownsDir(i,dy))return;const v=flickV(dx,dy,P.max||10);S.b.push({x:W/2,y:i?150:H-150,vx:v.vx,vy:v.vy,o:i});S.cd[i]=P.cd||50;beep(i?420:520,.05)},
+  ai(P,S){const inc=S.b.filter(b=>b.o===0&&b.vy<0).sort((a,b)=>a.y-b.y)[0];S.kt=inc?inc.x+inc.vx*(inc.y-40)/Math.max(1,-inc.vy):W/2;
+    if(S.cd[1]<=0&&S.t%35===0){const aim=S.k[0].x<W/2?W/2+40:W/2-40;this.T.flick.call(this,P,S,1,W/2,150,(aim-W/2)*.55+rnd(-10,10),(H-150)*.35)}},
+  update(P,S){const gw=P.gw||150;for(const i of[0,1]){if(S.cd[i]>0)S.cd[i]--;const k=S.k[i];let t;if(this.cpu&&i===1)t=clamp(S.kt,W/2-gw/2,W/2+gw/2);else{const q=this.tgt(i);if(q)t=q.x;else{const kv=this.keyv(i);if(kv&&!(this.kdown(i,0)))k.x+=kv.x*6}}
+      if(t!=null)k.x+=clamp(t-k.x,-9,9)*(this.cpu&&i===1?.62:1);k.x=clamp(k.x,W/2-gw/2+22,W/2+gw/2-22)}
+    for(const b of S.b){b.x+=b.vx;b.y+=b.vy;b.vx*=.998;b.vy*=.998;bounceWalls(b,9,14,W-14,null,null);
+      for(const[i,k]of S.k.entries()){const ky=i?40:H-40;if(Math.abs(b.y-ky)<16&&Math.abs(b.x-k.x)<34){b.vy=-b.vy*.8;b.y=ky+(i?16:-16);b.vx+=(b.x-k.x)*.08;beep(300,.04)}}
+      if(b.y<20||b.y>H-20){const i=b.y<20?1:0;if(Math.abs(b.x-W/2)<gw/2){b.d=1;if(this.point(1-i,P.to||7))return}else{b.vy*=-.8;b.y=clamp(b.y,21,H-21)}}
+      if(hyp(b.vx,b.vy)<.6)b.d=1}
+    for(let a=0;a<S.b.length;a++)for(let c=a+1;c<S.b.length;c++)collide(S.b[a],S.b[c],9,9,1);S.b=S.b.filter(b=>!b.d)},
+  draw(P,S){table('#2f8a3f','#ffffff55');const gw=P.gw||150;g.strokeStyle='#ffffff88';g.lineWidth=2;g.strokeRect(W/2-gw/2-20,14,gw+40,70);g.strokeRect(W/2-gw/2-20,H-84,gw+40,70);g.beginPath();g.arc(W/2,H/2,44,0,7);g.stroke();
+    R(W/2-gw/2,4,gw,10,'#ffffffcc');R(W/2-gw/2,H-14,gw,10,'#ffffffcc');bigScores(...S.sc);C(W/2,150,4,'#fff');C(W/2,H-150,4,'#fff');
+    S.k.forEach((k,i)=>{const y=i?40:H-40;R(k.x-30,y-8,60,16,i?P2C:P1C);C(k.x,y,9,'#ffffff88')});for(const b of S.b){ball(b,9,'#fff');C(b.x,b.y,3,b.o?P2C:P1C)}},
+  art(c){c.fillStyle='#2f8a3f';c.fillRect(0,0,128,96);c.fillStyle='#fff';c.fillRect(34,2,60,4);c.fillRect(34,90,60,4);c.fillStyle='#5ab0ff';c.fillRect(50,80,26,6);c.fillStyle='#ff5d8f';c.fillRect(56,10,26,6);c.fillStyle='#fff';c.beginPath();c.arc(70,40,5,0,7);c.fill()}};
+const GAMES2=[
+ [FOOS,'TABLE FOOSBALL',{},'Spin-free foosball for two. Slide your rods, tap to kick.'],
+ [FOOS,'WIDE GOAL FOOSBALL',{gw:160,to:7,kp:10},'Bigger goals and harder kicks. First to 7.'],
+ [PIN,'PINBALL DUEL',{},'Face-to-face pinball. Flip it past your rival.'],
+ [PIN,'BUMPER BLITZ PINBALL',{bumps:[[90,170,18],[270,170,18],[180,270,26],[90,370,18],[270,370,18],[180,170,12],[180,370,12]],max:13},'Seven bumpers and a faster ball.'],
+ [TARGET,'FLICK TARGET',{},'Slide discs onto the target. Closest rings score most.'],
+ [MARBLE,'MARBLE KNOCKOUT',{},'Shoot your big marble to knock theirs out of the ring.'],
+ [MARBLE,'MEGA MARBLES',{n:8,R:150},'Eight marbles each in a bigger ring.'],
+ [SIEGE,'CASTLE SIEGE',{},'Lob boulders over the table at your rival\'s castle.'],
+ [SIEGE,'RAPID SIEGE',{cd:40,hp:1,blast:44},'Faster catapults and weaker walls.'],
+ [CHOMP,'CHOMP CHOMP',{},'Hungry chompers race to eat the most marbles.'],
+ [CHOMP,'MEGA CHOMP',{n:50,cd:18},'Fifty marbles and quicker chomps.'],
+ [BOMB,'BOMB PASS',{},'Swat the bomb to their side before it blows!'],
+ [BOMB,'SHORT FUSE',{fmin:240,fmax:420,max:13},'Short fuses, fast swats.'],
+ [GOLF,'MINI GOLF DUEL',{},'Five holes. Both putt at once. First in wins the hole.'],
+ [SHOOT,'PENALTY SHOOTOUT',{},'Be the goalie and the striker at the same time.'],
+ [SHOOT,'WIDE GOAL SHOOTOUT',{gw:210,cd:35,to:10},'Huge goals, rapid shots, first to 10.']];
+GAMES2.forEach(([E,name,P,blurb],i)=>add(Object.assign(Object.create(BT),{id:'tt'+i,name,cat:'2dv',tab:1,c:['--a1','--a2','--a3','--a4','--a5','--a6'][i%6],tag:'TABLETOP · 2P',modes:VS2,desc:blurb,how:E.how,T:E,P,art(c){try{E.art(c)}catch(e){}}})));
+/* face-to-face classics also listed under TABLETOP */
+for(const id of['hockey','pong','trails','tanks','tug','draw','four','boxes'])GAMES.forEach(g2=>{if(g2.id===id)g2.tab=1});
+GAMES.forEach(g2=>{if(/^v\d+$/.test(g2.id))g2.tab=1});
+})();
+
+</script>
+<script>
 /* Original Pocket Arcade games, ported */
 const txt=(s,x,y,c='#f1eefa',sz=12)=>{g.fillStyle=c;g.font=sz+'px "Press Start 2P", monospace';g.textAlign='center';g.fillText(s,x,y)};
 /* ---------- Noodle (snake) ---------- */
@@ -3244,7 +3476,7 @@ GAMES.filter(g=>g.cat==='board').forEach(g=>X_(g.id,[
 </script>
 <script>
 /* Lobby */
-const CATS=[['2ds','2D SOLO','Score chasers for one'],['2dv','2D VERSUS','Two players on one screen (WASD vs arrows), online party with a friend, or vs CPU'],['3ds','3D SOLO','Full 3D games for one'],['3dc','3D CO-OP & VERSUS','Two players on one keyboard (WASD + arrows) or online party. All co-op games work solo too'],['board','BOARD GAMES','Play a bot, pass and play, or join an online party'],['casino','GAMBLING','Play money only. One shared bank across every game here'],['big','BIG GAMES','Full-size games that open in their own page']];
+const CATS=[['2ds','2D SOLO','Score chasers for one'],['tab','TABLETOP 2P','Two players, one tablet. Lay it flat between you and play from your own edge'],['2dv','2D VERSUS','Two players on one screen (WASD vs arrows), online party with a friend, or vs CPU'],['3ds','3D SOLO','Full 3D games for one'],['3dc','3D CO-OP & VERSUS','Two players on one keyboard (WASD + arrows) or online party. All co-op games work solo too'],['board','BOARD GAMES','Play a bot, pass and play, or join an online party'],['casino','GAMBLING','Play money only. One shared bank across every game here'],['big','BIG GAMES','Full-size games that open in their own page']];
 const tagOf={board:'BOARD · ONLINE',casino:'CASINO',big:'BIG','2ds':'2D','2dv':'2D · 2P · ONLINE','3ds':'3D','3dc':'3D · CO-OP · ONLINE','3dv':'3D · VS · ONLINE'};
 let filt='all';
 GAMES.unshift(...OLD);
@@ -3260,13 +3492,13 @@ const BIG=[
 function refreshBest(){for(const gm of GAMES){const el=$('best-'+gm.id);if(gm.cat==='board'&&el)el.textContent='BOTS · PARTY · WINS '+BW.get(gm.id);else if(el&&!gm.modes&&gm.cat!=='2dv'&&gm.id!=='rush'&&gm.cat!=='casino')el.textContent='BEST '+store.get(gm.id)}}
 function buildLobby(){
   $('intro').textContent=GAMES.length+' original games you can play right here, plus '+BIG.length+' big games that open in their own page. Board games let you play bots or join an online party with everyone. The Gambling section uses pretend chips with one shared bank. Versus games are for two people on one phone: one plays the bottom half, the other the top half. 3D co-op games split the screen left and right and also work solo. Gem Rush Co-op is online: anyone with this page open plays together live. Every 2-player game has ONLINE PARTY too: create a party code and a friend joins from their own device, or share one keyboard (P1 = WASD, P2 = arrow keys). Every game has its own music; tap 🎵 to switch to sound only or mute.';
-  const chips=$('chips');[['all','ALL '+(GAMES.length+BIG.length)]].concat(CATS.map(c=>[c[0],c[1]+' '+(c[0]==='big'?BIG.length:GAMES.filter(g=>g.cat===c[0]||(c[0]==='3dc'&&g.cat==='3dv')).length)])).forEach(([k,l])=>{
+  const chips=$('chips');[['all','ALL '+(GAMES.length+BIG.length)]].concat(CATS.map(c=>[c[0],c[1]+' '+(c[0]==='big'?BIG.length:GAMES.filter(g=>g.cat===c[0]||(c[0]==='3dc'&&g.cat==='3dv')||(c[0]==='tab'&&g.tab)).length)])).forEach(([k,l])=>{
     const b=document.createElement('button');b.className='chip'+(k===filt?' on':'');b.textContent=l;b.id='chip-'+k;b.onclick=()=>{filt=k;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===b));
       document.querySelectorAll('.sec').forEach(s=>s.hidden=filt!=='all'&&s.dataset.k!==filt)};chips.appendChild(b)});
   for(const[k,n,sub]of CATS){const sec=document.createElement('section');sec.className='sec';sec.dataset.k=k;sec.innerHTML=`<h2><b>${n}</b> · ${sub}</h2><div class="grid"></div>`;const grid=sec.querySelector('.grid');
     if(k==='big')BIG.forEach(([href,col,tag,name,desc,art])=>{const a=document.createElement('a');a.className='tile';a.href=href;a.target='_blank';a.rel='noopener';a.style.setProperty('--c','var('+col+')');
       a.innerHTML=`<canvas class="art" width="128" height="96"></canvas><span class="tag">${tag}</span><h3>${name}</h3><p>${desc}</p><span class="best">OPENS IN NEW PAGE ↗</span>`;const c=a.querySelector('canvas').getContext('2d');c.fillStyle='#0c0a14';c.fillRect(0,0,128,96);try{art(c)}catch(e){}grid.appendChild(a)});
-    GAMES.filter(gm=>gm.cat===k||(k==='3dc'&&gm.cat==='3dv')).forEach(gm=>{const b=document.createElement('button');b.className='tile';b.style.setProperty('--c','var('+gm.c+')');
+    GAMES.filter(gm=>gm.cat===k||(k==='3dc'&&gm.cat==='3dv')||(k==='tab'&&gm.tab)).forEach(gm=>{const b=document.createElement('button');b.className='tile';b.style.setProperty('--c','var('+gm.c+')');
       const mp=gm.cat==='2dv'||gm.cat==='3dv';
       b.innerHTML=`<canvas class="art" width="128" height="96"></canvas><span class="tag">${gm.tag||tagOf[gm.cat]}</span><h3>${gm.name}</h3><p>${gm.desc}</p><span class="best" id="best-${gm.id}">${gm.cat==='board'?'BOTS · PARTY · WINS '+BW.get(gm.id):gm.cat==='casino'?'<span class="cashv">'+money(CASH)+'</span> SHARED BANK':gm.id==='rush'?'PLAY WITH FRIENDS ONLINE · BEST '+store.get('rush'):mp?(gm.modes?'1 KEYBOARD · ONLINE · VS CPU':'1 KEYBOARD · ONLINE'):gm.cat==='3dc'?'CO-OP · ONLINE · SOLO · BEST '+store.get(gm.id):'BEST '+store.get(gm.id)}</span>`;
       const c=b.querySelector('canvas').getContext('2d');c.fillStyle='#0c0a14';c.fillRect(0,0,128,96);try{gm.art(c)}catch(e){}b.onclick=()=>open(gm);grid.appendChild(b)});

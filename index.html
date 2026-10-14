@@ -40,6 +40,8 @@ a.tile{text-decoration:none;color:inherit}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{all:unset;cursor:pointer;font-family:var(--display);font-size:9px;letter-spacing:.04em;padding:9px 11px;border-radius:8px;border:2px solid var(--line);color:var(--dim)}
 .chip.on{border-color:var(--a1);color:var(--a1)}
+.chip.fam{color:var(--a2);border-style:dashed}.chip.fam.on{border-color:var(--a2);color:var(--a2);border-style:solid}
+.sec.series h2 b{color:var(--a2)}
 .chip:focus-visible{outline:3px solid var(--a1)}
 .sec h2{font-family:var(--display);font-size:11px;letter-spacing:.06em;color:var(--dim);margin:6px 0 10px;line-height:1.6}
 .sec h2 b{color:var(--ink);font-weight:400}
@@ -1681,7 +1683,7 @@ const V=[
 ['tag','3dv','CANDY TAG',7,{time:25},'Sweet, sticky tag in candy land.']];
 const COLS=['--a1','--a2','--a3','--a4','--a5','--a6'];
 V.forEach(([eng,cat,name,thi,P,blurb],i)=>{const E=T[eng];const th=TH[thi];
-  add(Object.assign(Object.create(BASE),{id:'m'+i,name,cat,c:COLS[i%6],tag:{'3ds':'3D · NEW','3dc':'3D · CO-OP · NEW','3dv':'3D · VS · NEW'}[cat],
+  add(Object.assign(Object.create(BASE),{id:'m'+i,name,cat,fam:eng==='puck'?'hockey':eng,c:COLS[i%6],tag:{'3ds':'3D · NEW','3dc':'3D · CO-OP · NEW','3dv':'3D · VS · NEW'}[cat],
     modes:cat==='3dc'?COOP:cat==='3dv'?['2 PLAYERS','VS CPU']:undefined,desc:blurb,how:E.how,T:E,P,th,
     art(c){c.fillStyle=hx(th.bg);c.fillRect(0,0,128,96);try{E.art.call(this,c,th)}catch(e){}},
     ...(E.rst?{rst:E.rst}:{}),...(E.rnd2?{rnd2:E.rnd2}:{}),...(E.newFlag?{newFlag:E.newFlag}:{}),...(E.fall?{fall:E.fall}:{})}))});
@@ -1852,7 +1854,7 @@ const V=[
 ['blast','RICOCHET',{bounce:3,col:'#05100f'},'Shots bounce off the side walls.']];
 const CC=['--a1','--a2','--a3','--a4','--a5','--a6'];
 V.forEach(([eng,name,P,blurb],i)=>{const E=ENG[eng];
-  add(Object.assign(Object.create(BASE2),{id:'v'+i,name,cat:'2dv',c:CC[i%6],tag:'2D · VS · NEW',modes:VS2,desc:blurb,how:HOW[eng],T:E,P,sticks:!!E.sticks,
+  add(Object.assign(Object.create(BASE2),{id:'v'+i,name,cat:'2dv',fam:eng,c:CC[i%6],tag:'2D · VS · NEW',modes:VS2,desc:blurb,how:HOW[eng],T:E,P,sticks:!!E.sticks,
     art(c){try{E.art.call(this,c,P)}catch(e){}}}))});
 })();
 
@@ -3489,18 +3491,29 @@ const BIG=[
  ['../rush-kitchen/','--a6','3D TYCOON','RUSH KITCHEN','Watch a chef-bot crew run your 3D restaurant. Grow it to $1 million.',c=>{c.font='30px sans-serif';c.fillText('🍔',10,44);c.fillText('🍕',48,44);c.fillText('🌮',86,44);c.fillStyle='#ff8a3d';c.fillRect(10,64,108,10);c.fillStyle='#3ddc97';c.fillRect(10,64,70,10)}],
  ['../pack-rat-cards/','--a5','3D SHOP SIM','PACK RAT CARDS','Run a 3D card shop: open packs, stock shelves, ring up customers.',c=>{[['#ff8a3d',14,-8],['#3ddc97',48,0],['#8f6bff',82,8]].forEach(([col,x,r])=>{c.save();c.translate(x+16,50);c.rotate(r*Math.PI/180);c.fillStyle=col;c.fillRect(-16,-24,32,46);c.fillStyle='#ffffff55';c.fillRect(-12,-20,24,20);c.restore()})}],
  ['../blockbreaker-brawl/','--a6','BUILD & BLAST','BLOCKBREAKER BRAWL','Mine, build walls, and blast robot waves.',c=>{c.fillStyle='#6f7686';[[10,60],[30,60],[90,30],[90,50]].forEach(([x,y])=>c.fillRect(x,y,18,18));c.fillStyle='#4fd1c5';c.fillRect(94,34,6,6);c.fillStyle='#3a404f';c.fillRect(54,40,20,20);c.fillStyle='#f29a2e';c.fillRect(52,37,24,7);c.fillStyle='#d94b6a';c.fillRect(100,74,14,14)}]];
-function refreshBest(){for(const gm of GAMES){const el=$('best-'+gm.id);if(gm.cat==='board'&&el)el.textContent='BOTS · PARTY · WINS '+BW.get(gm.id);else if(el&&!gm.modes&&gm.cat!=='2dv'&&gm.id!=='rush'&&gm.cat!=='casino')el.textContent='BEST '+store.get(gm.id)}}
+function refreshBest(){for(const gm of GAMES){for(const el of document.querySelectorAll('[data-best="'+gm.id+'"]')){if(gm.cat==='board'&&el)el.textContent='BOTS · PARTY · WINS '+BW.get(gm.id);else if(el&&!gm.modes&&gm.cat!=='2dv'&&gm.id!=='rush'&&gm.cat!=='casino')el.textContent='BEST '+store.get(gm.id)}}}
 function buildLobby(){
   $('intro').textContent=GAMES.length+' original games you can play right here, plus '+BIG.length+' big games that open in their own page. Board games let you play bots or join an online party with everyone. The Gambling section uses pretend chips with one shared bank. Versus games are for two people on one phone: one plays the bottom half, the other the top half. 3D co-op games split the screen left and right and also work solo. Gem Rush Co-op is online: anyone with this page open plays together live. Every 2-player game has ONLINE PARTY too: create a party code and a friend joins from their own device, or share one keyboard (P1 = WASD, P2 = arrow keys). Every game has its own music; tap 🎵 to switch to sound only or mute.';
-  const chips=$('chips');[['all','ALL '+(GAMES.length+BIG.length)]].concat(CATS.map(c=>[c[0],c[1]+' '+(c[0]==='big'?BIG.length:GAMES.filter(g=>g.cat===c[0]||(c[0]==='3dc'&&g.cat==='3dv')||(c[0]==='tab'&&g.tab)).length)])).forEach(([k,l])=>{
-    const b=document.createElement('button');b.className='chip'+(k===filt?' on':'');b.textContent=l;b.id='chip-'+k;b.onclick=()=>{filt=k;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===b));
-      document.querySelectorAll('.sec').forEach(s=>s.hidden=filt!=='all'&&s.dataset.k!==filt)};chips.appendChild(b)});
-  for(const[k,n,sub]of CATS){const sec=document.createElement('section');sec.className='sec';sec.dataset.k=k;sec.innerHTML=`<h2><b>${n}</b> · ${sub}</h2><div class="grid"></div>`;const grid=sec.querySelector('.grid');
+  /* series: every game family with 3+ versions gets its own section */
+  const FAMS=[['hockey','AIR HOCKEY','Every way to smack a puck, in 2D and 3D'],['snake','SNAKES','Snakes and light trails, solo and head to head'],['pong','PONG','Paddles, balls and bricks'],
+    ['sumo','SUMO','Push your rival off the edge'],['runner','RUNNERS','Endless 3D runs'],['blaster','BLASTERS','Auto-fire arena waves'],['dodge','DODGE','Meteors, boulders and lasers'],['collect','GEM GRAB','Grab gems, dodge chasers'],
+    ['catch','CATCH','Catch what falls, dodge the bombs'],['hopper','CROSSING','Cross roads and rivers'],['tag','TAG','You are IT'],['paint','PAINT WARS','Cover the most floor'],['flags','FLAG RACES','Race to every flag'],
+    ['king','KING OF THE HILL','Hold the zone'],['bump','BUMPER CARS','Ram for points'],['grab','COIN GRAB','First to the coins'],['blast','BLASTER DUELS','Ships face off']];
+  const famOf=gm=>gm.fam||({hockey:'hockey',pong:'pong',snake:'snake',trails:'snake',sumo:'sumo'})[gm.id]||null;
+  const famN={};GAMES.forEach(g=>{const f=famOf(g);if(f)famN[f]=(famN[f]||0)+1});
+  const bigFam=g=>{const f=famOf(g);return f&&famN[f]>=3?f:null};
+  const SECS=[];const tabC=CATS.find(c=>c[0]==='tab');if(tabC)SECS.push([tabC[0],tabC[1],tabC[2],GAMES.filter(g=>g.tab)]);
+  FAMS.filter(f=>famN[f[0]]>=3).forEach(([k,n,sub])=>SECS.push(['f-'+k,n,sub,GAMES.filter(g=>bigFam(g)===k)]));
+  CATS.filter(c=>c[0]!=='tab').forEach(([k,n,sub])=>SECS.push([k,n,sub,k==='big'?null:GAMES.filter(gm=>(gm.cat===k||(k==='3dc'&&gm.cat==='3dv'))&&!bigFam(gm))]));
+  const chips=$('chips');[['all','ALL '+(GAMES.length+BIG.length)]].concat(SECS.map(s=>[s[0],s[1]+' '+(s[3]?s[3].length:BIG.length)])).forEach(([k,l])=>{
+    const b=document.createElement('button');b.className='chip'+(k===filt?' on':'')+(k.startsWith('f-')?' fam':'');b.textContent=l;b.id='chip-'+k;b.onclick=()=>{filt=k;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===b));
+      document.querySelectorAll('.sec').forEach(s=>s.hidden=filt!=='all'&&s.dataset.k!==filt);if(filt!=='all'){const s=document.querySelector('.sec[data-k="'+filt+'"]');s&&s.scrollIntoView({block:'start'})}};chips.appendChild(b)});
+  for(const[k,n,sub,list]of SECS){if(list&&!list.length)continue;const sec=document.createElement('section');sec.className='sec'+(k.startsWith('f-')?' series':'');sec.dataset.k=k;sec.innerHTML=`<h2><b>${n}</b> · ${list?list.length+' games · ':''}${sub}</h2><div class="grid"></div>`;const grid=sec.querySelector('.grid');
     if(k==='big')BIG.forEach(([href,col,tag,name,desc,art])=>{const a=document.createElement('a');a.className='tile';a.href=href;a.target='_blank';a.rel='noopener';a.style.setProperty('--c','var('+col+')');
       a.innerHTML=`<canvas class="art" width="128" height="96"></canvas><span class="tag">${tag}</span><h3>${name}</h3><p>${desc}</p><span class="best">OPENS IN NEW PAGE ↗</span>`;const c=a.querySelector('canvas').getContext('2d');c.fillStyle='#0c0a14';c.fillRect(0,0,128,96);try{art(c)}catch(e){}grid.appendChild(a)});
-    GAMES.filter(gm=>gm.cat===k||(k==='3dc'&&gm.cat==='3dv')||(k==='tab'&&gm.tab)).forEach(gm=>{const b=document.createElement('button');b.className='tile';b.style.setProperty('--c','var('+gm.c+')');
+    (list||[]).forEach(gm=>{const b=document.createElement('button');b.className='tile';b.style.setProperty('--c','var('+gm.c+')');
       const mp=gm.cat==='2dv'||gm.cat==='3dv';
-      b.innerHTML=`<canvas class="art" width="128" height="96"></canvas><span class="tag">${gm.tag||tagOf[gm.cat]}</span><h3>${gm.name}</h3><p>${gm.desc}</p><span class="best" id="best-${gm.id}">${gm.cat==='board'?'BOTS · PARTY · WINS '+BW.get(gm.id):gm.cat==='casino'?'<span class="cashv">'+money(CASH)+'</span> SHARED BANK':gm.id==='rush'?'PLAY WITH FRIENDS ONLINE · BEST '+store.get('rush'):mp?(gm.modes?'1 KEYBOARD · ONLINE · VS CPU':'1 KEYBOARD · ONLINE'):gm.cat==='3dc'?'CO-OP · ONLINE · SOLO · BEST '+store.get(gm.id):'BEST '+store.get(gm.id)}</span>`;
+      b.innerHTML=`<canvas class="art" width="128" height="96"></canvas><span class="tag">${gm.tag||tagOf[gm.cat]}</span><h3>${gm.name}</h3><p>${gm.desc}</p><span class="best" data-best="${gm.id}">${gm.cat==='board'?'BOTS · PARTY · WINS '+BW.get(gm.id):gm.cat==='casino'?'<span class="cashv">'+money(CASH)+'</span> SHARED BANK':gm.id==='rush'?'PLAY WITH FRIENDS ONLINE · BEST '+store.get('rush'):mp?(gm.modes?'1 KEYBOARD · ONLINE · VS CPU':'1 KEYBOARD · ONLINE'):gm.cat==='3dc'?'CO-OP · ONLINE · SOLO · BEST '+store.get(gm.id):'BEST '+store.get(gm.id)}</span>`;
       const c=b.querySelector('canvas').getContext('2d');c.fillStyle='#0c0a14';c.fillRect(0,0,128,96);try{gm.art(c)}catch(e){}b.onclick=()=>open(gm);grid.appendChild(b)});
     $('secs').appendChild(sec)}}
 buildLobby();

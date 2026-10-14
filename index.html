@@ -37,7 +37,12 @@ a.tile{text-decoration:none;color:inherit}
 .pmode:focus-visible{outline:3px solid var(--c)}
 .card:focus-visible,.cell:focus-visible{outline:3px solid var(--a1)}
 .status{font-family:var(--display);font-size:10px;text-align:center;margin:14px 0;color:var(--dim);line-height:1.6}
-.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips{position:sticky;top:env(safe-area-inset-top,0px);z-index:4;display:flex;flex-direction:column;gap:6px;background:var(--bg);padding:10px 0;margin:0 -2px;border-bottom:2px solid var(--line)}
+#intro.moved{font-size:13px;margin:0}
+.frow{display:flex;gap:6px;align-items:center;overflow-x:auto;scrollbar-width:none;padding:2px}.frow::-webkit-scrollbar{display:none}
+.frow .chip{white-space:nowrap;flex:none}.flab{position:sticky;left:0;z-index:1;background:var(--bg);padding:6px 4px 6px 0;flex:none;font-family:var(--display);font-size:8px;color:var(--dim);letter-spacing:.08em;width:74px}
+#gsearch{all:unset;box-sizing:border-box;flex:1;min-width:120px;font-size:14px;padding:8px 12px;border-radius:8px;border:2px solid var(--line);background:#0c0a14;color:var(--ink)}#gsearch:focus{border-color:var(--a1)}
+.ftitle{position:sticky;left:0;background:var(--bg);font-family:var(--display);font-size:9px;color:var(--a1);white-space:nowrap}
 .chip{all:unset;cursor:pointer;font-family:var(--display);font-size:9px;letter-spacing:.04em;padding:9px 11px;border-radius:8px;border:2px solid var(--line);color:var(--dim)}
 .chip.on{border-color:var(--a1);color:var(--a1)}
 .chip.fam{color:var(--a2);border-style:dashed}.chip.fam.on{border-color:var(--a2);color:var(--a2);border-style:solid}
@@ -3505,9 +3510,13 @@ function buildLobby(){
   const SECS=[];const tabC=CATS.find(c=>c[0]==='tab');if(tabC)SECS.push([tabC[0],tabC[1],tabC[2],GAMES.filter(g=>g.tab)]);
   FAMS.filter(f=>famN[f[0]]>=3).forEach(([k,n,sub])=>SECS.push(['f-'+k,n,sub,GAMES.filter(g=>bigFam(g)===k)]));
   CATS.filter(c=>c[0]!=='tab').forEach(([k,n,sub])=>SECS.push([k,n,sub,k==='big'?null:GAMES.filter(gm=>(gm.cat===k||(k==='3dc'&&gm.cat==='3dv'))&&!bigFam(gm))]));
-  const chips=$('chips');[['all','ALL '+(GAMES.length+BIG.length)]].concat(SECS.map(s=>[s[0],s[1]+' '+(s[3]?s[3].length:BIG.length)])).forEach(([k,l])=>{
-    const b=document.createElement('button');b.className='chip'+(k===filt?' on':'')+(k.startsWith('f-')?' fam':'');b.textContent=l;b.id='chip-'+k;b.onclick=()=>{filt=k;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===b));
-      document.querySelectorAll('.sec').forEach(s=>s.hidden=filt!=='all'&&s.dataset.k!==filt);if(filt!=='all'){const s=document.querySelector('.sec[data-k="'+filt+'"]');s&&s.scrollIntoView({block:'start'})}};chips.appendChild(b)});
+  const chips=$('chips');chips.innerHTML='<div class="frow"><span class="ftitle">🎮 FIND GAMES</span><input id="gsearch" type="search" placeholder="Search '+(GAMES.length+BIG.length)+' games…" aria-label="Search games"></div><div class="frow" id="fSer"><span class="flab">SERIES</span></div><div class="frow" id="fCat"><span class="flab">CATEGORIES</span></div>';
+  const setF=k=>{filt=k;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.id==='chip-'+k));$('gsearch').value='';document.querySelectorAll('.tile').forEach(t=>t.hidden=false);
+    document.querySelectorAll('.sec').forEach(s=>s.hidden=filt!=='all'&&s.dataset.k!==filt);const top=$('chips').getBoundingClientRect().top+scrollY;if(scrollY>top)scrollTo({top})};
+  [['all','ALL '+(GAMES.length+BIG.length)]].concat(SECS.map(s=>[s[0],s[1]+' '+(s[3]?s[3].length:BIG.length)])).forEach(([k,l])=>{
+    const b=document.createElement('button');b.className='chip'+(k===filt?' on':'')+(k.startsWith('f-')?' fam':'');b.textContent=l;b.id='chip-'+k;b.onclick=()=>setF(k);(k.startsWith('f-')||k==='tab'?$('fSer'):$('fCat')).appendChild(b)});
+  $('gsearch').oninput=()=>{const q=$('gsearch').value.trim().toLowerCase();if(q&&filt!=='all'){filt='all';document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.id==='chip-all'))}
+    document.querySelectorAll('.sec').forEach(s=>{let n=0;s.querySelectorAll('.tile').forEach(t=>{const hit=!q||t.textContent.toLowerCase().includes(q);t.hidden=!hit;if(hit)n++});s.hidden=(!q&&filt!=='all'&&s.dataset.k!==filt)||(q&&!n)})};
   for(const[k,n,sub,list]of SECS){if(list&&!list.length)continue;const sec=document.createElement('section');sec.className='sec'+(k.startsWith('f-')?' series':'');sec.dataset.k=k;sec.innerHTML=`<h2><b>${n}</b> · ${list?list.length+' games · ':''}${sub}</h2><div class="grid"></div>`;const grid=sec.querySelector('.grid');
     if(k==='big')BIG.forEach(([href,col,tag,name,desc,art])=>{const a=document.createElement('a');a.className='tile';a.href=href;a.target='_blank';a.rel='noopener';a.style.setProperty('--c','var('+col+')');
       a.innerHTML=`<canvas class="art" width="128" height="96"></canvas><span class="tag">${tag}</span><h3>${name}</h3><p>${desc}</p><span class="best">OPENS IN NEW PAGE ↗</span>`;const c=a.querySelector('canvas').getContext('2d');c.fillStyle='#0c0a14';c.fillRect(0,0,128,96);try{art(c)}catch(e){}grid.appendChild(a)});
@@ -3517,6 +3526,7 @@ function buildLobby(){
       const c=b.querySelector('canvas').getContext('2d');c.fillStyle='#0c0a14';c.fillRect(0,0,128,96);try{gm.art(c)}catch(e){}b.onclick=()=>open(gm);grid.appendChild(b)});
     $('secs').appendChild(sec)}}
 buildLobby();
+(()=>{const i=$('intro'),c=$('chips');if(i&&c){c.after(i);i.classList.add('moved')}})();
 const tc=s=>s.toLowerCase().replace(/\b\w/g,m=>m.toUpperCase()).replace(/\b3d\b/i,'3D').replace('2048','2048');
 lbInit('arcade',GAMES.filter(gm=>gm.cat!=='2dv'&&gm.cat!=='3dv'&&gm.cat!=='casino'&&gm.cat!=='board').map(gm=>({k:gm.id,n:tc(gm.name),unit:gm.id==='ttt'?'wins':gm.id==='rush'?'gems':''})).concat([{k:'cash',n:'Casino Bank',fmt:v=>'$'+v.toLocaleString()}]));
 $('lbBtn').onclick=()=>lbOpen();$('lbPlay').onclick=()=>lbOpen(cur&&(cur.cat==='casino'?'cash':cur.id));
